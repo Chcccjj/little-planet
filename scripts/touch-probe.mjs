@@ -76,6 +76,7 @@ async function runTouch() {
     isMobile: true,
     deviceScaleFactor: 1,
   })
+  await context.addInitScript(() => localStorage.removeItem('little-planet.save.v1'))
   const page = await context.newPage()
   const client = await context.newCDPSession(page)
   await client.send('Emulation.setEmulatedMedia', {
@@ -87,7 +88,8 @@ async function runTouch() {
   const errors = collect(page, 'touch')
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.waitForFunction(() => window.__littlePlanet, null, { timeout: 15000 })
-  await page.waitForTimeout(500)
+  await beginPlay(page)
+  await page.waitForTimeout(300)
   errors.assertClean('after load')
 
   const coarse = await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)
@@ -210,11 +212,13 @@ async function runDrawCalls() {
     isMobile: false,
     deviceScaleFactor: 1,
   })
+  await context.addInitScript(() => localStorage.removeItem('little-planet.save.v1'))
   const page = await context.newPage()
   const errors = collect(page, 'desktop')
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.waitForFunction(() => window.__littlePlanet, null, { timeout: 15000 })
-  await page.waitForTimeout(700)
+  await beginPlay(page)
+  await page.waitForTimeout(400)
   results.perf.spawn = await samplePerf(page, 900)
   results.perf.maxDrawCalls = await page.evaluate(() => window.__littlePlanet.maxDrawCalls())
   results.perf.panel = await page.locator('.perf-panel').innerText()
@@ -226,6 +230,15 @@ async function runDrawCalls() {
   if (desktopHint !== 'E / 点击') throw new Error(`desktop hint label was ${desktopHint}`)
   errors.assertClean('draw calls')
   await context.close()
+}
+
+async function beginPlay(page) {
+  const play = page.locator('[data-action="play"]')
+  await play.waitFor({ state: 'visible', timeout: 8000 })
+  const label = (await play.innerText()).trim()
+  if (label !== '开始') throw new Error(`title button was ${JSON.stringify(label)}, wanted 开始`)
+  await play.click()
+  await page.waitForFunction(() => window.__littlePlanet.session().mode === 'play', null, { timeout: 8000 })
 }
 
 async function tapProp(page, point, id) {

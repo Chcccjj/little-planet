@@ -17,6 +17,7 @@ export interface DialogueView {
   open(pages: readonly string[]): void
   /** Finish the current sentence, then turn the page, then close. */
   advance(): void
+  close(): void
   update(dt: number): void
   snapshot(): DialogueSnapshot
   dispose(): void
@@ -108,6 +109,15 @@ export function createDialogue(onAdvance: (via: string) => void): DialogueView {
       pages = []
       page = 0
       shown = 0
+      sync()
+    },
+    close(): void {
+      if (!open) return
+      open = false
+      pages = []
+      page = 0
+      shown = 0
+      carry = 0
       sync()
     },
     update(dt: number): void {

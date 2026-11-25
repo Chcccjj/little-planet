@@ -27,6 +27,8 @@ export interface SunsetShow {
   /** Draw-call sweep. Does not change the timeline. */
   preview(amount: number): void
   restore(): void
+  /** Daylight again, chair back where it was planted. */
+  reset(): void
 }
 
 /**
@@ -58,6 +60,9 @@ export function createSunset(options: {
   const daySunIntensity = sun.intensity
   const dayFillIntensity = fill.intensity
   const dayDensity = fog.density
+  const homePos = chair.mesh.position.clone()
+  const homeQuat = chair.mesh.quaternion.clone()
+  const homeUp = chair.up.clone()
 
   const duskSunColor = new Color(palette.warmAsh)
   const duskFillColor = new Color(palette.warmAsh)
@@ -212,6 +217,15 @@ export function createSunset(options: {
     },
     restore(): void {
       apply(live)
+    },
+    reset(): void {
+      mode = 'idle'
+      elapsed = 0
+      moving = false
+      commit(0)
+      chair.mesh.position.copy(homePos)
+      chair.mesh.quaternion.copy(homeQuat)
+      chair.up.copy(homeUp)
     },
   }
 }

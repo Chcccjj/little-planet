@@ -16,17 +16,26 @@ export interface FrameInput {
 }
 
 /**
- * A physical source of input. PR 4 can add a virtual joystick (writes move)
- * and a touch-drag look (writes look) without changing locomotion or the camera.
+ * A physical source of input. The virtual joystick writes move, touch-drag
+ * writes look, and a pinch writes zoom. Locomotion only sees the summed frame.
  * `contribute` adds into the frame; it does not replace other drivers.
  */
 export interface InputDriver {
   contribute(frame: FrameInput): void
+  /** Drop held keys and accumulated look. Inactive drivers ignore new events. */
+  setActive(active: boolean): void
+  /**
+   * Dialogue freezes walking. The joystick hides and forgets its deflection
+   * so closing the book does not send the prince off. Look and zoom stay.
+   */
+  setWalking(enabled: boolean): void
   dispose(): void
 }
 
 export interface GameInput {
   read(frame: FrameInput): void
+  setActive(active: boolean): void
+  setWalking(enabled: boolean): void
   dispose(): void
 }
 

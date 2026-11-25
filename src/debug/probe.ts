@@ -17,12 +17,33 @@ export interface PlanetReadout {
   pixelRatio: number
 }
 
+export interface SessionSnapshot {
+  mode: 'title' | 'play' | 'paused'
+  discovered: string[]
+  sunsetViews: number
+  discoverable: number
+  sound: boolean
+}
+
+export interface CameraReadout {
+  x: number
+  y: number
+  z: number
+  dx: number
+  dy: number
+  dz: number
+  /** Camera position on the tangent plane, relative to the prince's facing. */
+  orbitYaw: number
+}
+
 export interface LittlePlanetProbe {
   read(): PlanetReadout
   focus(id: string, yawPx?: number, pitchPx?: number): { x: number; y: number; near: string | null } | null
   project(id: string): { x: number; y: number } | null
   pick(clientX: number, clientY: number): string | null
   state(): InteractionState
+  session(): SessionSnapshot
+  camera(): CameraReadout
   maxDrawCalls(): { calls: number; triangles: number }
 }
 
@@ -41,12 +62,16 @@ export function installProbe(sources: {
   follow: FollowCamera
   view: SceneContext
   interactions: Interactions
+  session(): SessionSnapshot
 }): void {
   const { locomotion, follow, view, interactions } = sources
   const debug = interactions.debug
   if (!debug) return
   const direction = new Vector3()
   const forward = new Vector3()
+  const look = new Vector3()
+  const offset = new Vector3()
+  const right = new Vector3()
 
   window.__littlePlanet = {
     read() {
@@ -90,6 +115,25 @@ export function installProbe(sources: {
     },
     state() {
       return debug.state()
+    },
+    session() {
+      return sources.session()
+    },
+    camera() {
+      const position = view.camera.position
+      view.camera.getWorldDirection(look)
+      offset.copy(position).sub(locomotion.position)
+      offset.addScaledVector(locomotion.up, -offset.dot(locomotion.up))
+      right.crossVectors(locomotion.up, locomotion.forward)
+      return {
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        dx: look.x,
+        dy: look.y,
+        dz: look.z,
+        orbitYaw: Math.atan2(offset.dot(right), offset.dot(locomotion.forward)),
+      }
     },
     maxDrawCalls() {
       const camera = view.camera

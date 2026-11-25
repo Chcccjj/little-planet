@@ -74,6 +74,13 @@ export interface InteractionDebug {
 
 export interface Interactions {
   readonly blocksMovement: boolean
+  readonly discoverable: number
+  discoveredIds(): readonly string[]
+  sunsetViews(): number
+  restoreProgress(ids: readonly string[], sunsetViews: number): void
+  resetProgress(): void
+  /** Hide the proximity hint while the simulation is not running. */
+  suspend(): void
   update(dt: number): void
   dispose(): void
   /** Present in dev builds. Production omits the framing and sweep helpers. */
@@ -132,6 +139,9 @@ export function createInteractions(
     avoidRadius: CHARACTER_RADIUS,
   })
   const hint = createHint()
+  const discovered = new Set<string>()
+  let sunsetViews = 0
+  let sunsetLatched = false
   let lastTriggerId: string | null = null
   let lastTriggerPointer: string | null = null
   let lastAdvancePointer: string | null = null
@@ -234,6 +244,7 @@ export function createInteractions(
   }
 
   const activate = (item: Item, via: string) => {
+    discovered.add(item.id)
     lastTriggerId = item.id
     lastTriggerPointer = via
     if (item.sunset && !sunset.start()) {
@@ -284,9 +295,38 @@ export function createInteractions(
     get blocksMovement() {
       return dialogue.isOpen
     },
+    discoverable: items.length,
+    discoveredIds(): readonly string[] {
+      return [...discovered]
+    },
+    sunsetViews(): number {
+      return sunsetViews
+    },
+    restoreProgress(ids: readonly string[], views: number): void {
+      discovered.clear()
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        if (id && byId.has(id)) discovered.add(id)
+      }
+      sunsetViews = Number.isFinite(views) && views > 0 ? Math.floor(views) : 0
+      sunsetLatched = sunset.playing
+    },
+    resetProgress(): void {
+      discovered.clear()
+      sunsetViews = 0
+      sunsetLatched = false
+      dialogue.close()
+      sunset.reset()
+    },
+    suspend(): void {
+      hint.hide()
+    },
     update(dt: number): void {
       dialogue.update(dt)
       sunset.update(dt)
+      const playing = sunset.playing
+      if (playing && !sunsetLatched) sunsetViews += 1
+      sunsetLatched = playing
       updateHint()
     },
     dispose(): void {

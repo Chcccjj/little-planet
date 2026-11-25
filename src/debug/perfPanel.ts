@@ -2,6 +2,7 @@ import type { WebGLRenderer } from 'three'
 
 export interface PerfPanel {
   update(): void
+  dispose(): void
 }
 
 const SAMPLE_MS = 400
@@ -12,7 +13,10 @@ const SAMPLE_MS = 400
  */
 export function createPerfPanel(renderer: WebGLRenderer): PerfPanel {
   if (!import.meta.env.DEV) {
-    return { update() {} }
+    return {
+      update() {},
+      dispose() {},
+    }
   }
   return mountPerfPanel(renderer)
 }
@@ -43,6 +47,9 @@ function mountPerfPanel(renderer: WebGLRenderer): PerfPanel {
       panel.textContent = `${fps} fps\n${calls} calls\n${triangles.toLocaleString('en-US')} tris`
       frames = 0
       elapsed = 0
+    },
+    dispose() {
+      panel.remove()
     },
   }
 }

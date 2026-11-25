@@ -2,7 +2,7 @@ import type { FrameInput, InputDriver } from './types'
 
 /**
  * Keyboard move plus mouse-drag look and wheel zoom.
- * Touch pointers are ignored on purpose: PR 4 supplies those through InputDriver.
+ * Touch pointers are ignored here; the touch driver owns them.
  */
 export function createDesktopInput(target: HTMLElement): InputDriver {
   const keys = new Set<string>()
@@ -12,9 +12,10 @@ export function createDesktopInput(target: HTMLElement): InputDriver {
   let pointerId = -1
   let lastX = 0
   let lastY = 0
+  let active = true
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.repeat) return
+    if (!active || event.repeat) return
     if (isMoveCode(event.code)) {
       if (event.code.startsWith('Arrow')) event.preventDefault()
       keys.add(event.code)
@@ -31,7 +32,7 @@ export function createDesktopInput(target: HTMLElement): InputDriver {
   }
 
   const onPointerDown = (event: PointerEvent) => {
-    if (event.pointerType !== 'mouse' || event.button !== 0 || pointerId !== -1) return
+    if (!active || event.pointerType !== 'mouse' || event.button !== 0 || pointerId !== -1) return
     pointerId = event.pointerId
     lastX = event.clientX
     lastY = event.clientY
@@ -43,7 +44,7 @@ export function createDesktopInput(target: HTMLElement): InputDriver {
   }
 
   const onPointerMove = (event: PointerEvent) => {
-    if (event.pointerId !== pointerId) return
+    if (!active || event.pointerId !== pointerId) return
     lookX += event.clientX - lastX
     lookY += event.clientY - lastY
     lastX = event.clientX
@@ -57,6 +58,7 @@ export function createDesktopInput(target: HTMLElement): InputDriver {
 
   const onWheel = (event: WheelEvent) => {
     event.preventDefault()
+    if (!active) return
     zoom += normalizeWheel(event)
   }
 
@@ -86,6 +88,16 @@ export function createDesktopInput(target: HTMLElement): InputDriver {
       lookY = 0
       zoom = 0
     },
+    setActive(next: boolean): void {
+      active = next
+      if (next) return
+      keys.clear()
+      pointerId = -1
+      lookX = 0
+      lookY = 0
+      zoom = 0
+    },
+    setWalking(): void {},
     dispose(): void {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)

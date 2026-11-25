@@ -1,4 +1,5 @@
 import { createDesktopInput } from './desktopInput'
+import { createTouchInput } from './touchInput'
 import { createFrameInput, type FrameInput, type GameInput, type InputDriver } from './types'
 
 export { createFrameInput }
@@ -6,11 +7,11 @@ export type { FrameInput, GameInput, InputDriver }
 
 /**
  * Composes input drivers into one frame.
- * Desktop keys and mouse are the only driver today. A virtual joystick and
- * touch-drag look drop in as extra InputDrivers — locomotion only sees `read()`.
+ * Keyboard, mouse, and the touch joystick all add into the same move and look.
+ * Locomotion only sees `read()`.
  */
 export function createInput(target: HTMLElement): GameInput {
-  const drivers: InputDriver[] = [createDesktopInput(target)]
+  const drivers: InputDriver[] = [createDesktopInput(target), createTouchInput(target)]
 
   return {
     read(frame: FrameInput): void {
@@ -26,6 +27,12 @@ export function createInput(target: HTMLElement): GameInput {
         frame.moveX *= inv
         frame.moveY *= inv
       }
+    },
+    setActive(active: boolean): void {
+      for (let i = 0; i < drivers.length; i++) drivers[i].setActive(active)
+    },
+    setWalking(enabled: boolean): void {
+      for (let i = 0; i < drivers.length; i++) drivers[i].setWalking(enabled)
     },
     dispose(): void {
       for (let i = 0; i < drivers.length; i++) drivers[i].dispose()
