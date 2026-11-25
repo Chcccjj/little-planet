@@ -117,7 +117,9 @@ async function runTouch() {
   }
   results.touch.dragIgnored = { id: first.id }
 
-  await tapProp(page, first, first.id)
+  // The drag orbits the camera, so tap the rose where it is now, not where the finger started.
+  const afterDrag = (await onScreen(page)).find((item) => item.id === first.id) ?? (await reveal(page, first.id))
+  await tapProp(page, afterDrag, first.id)
   await page.waitForFunction(() => !window.__littlePlanet.state().typing, null, { timeout: 4000 })
   const spoken = await state(page)
   if (spoken.text !== spoken.full) throw new Error(`spawn line did not finish: ${JSON.stringify(spoken)}`)
@@ -150,7 +152,7 @@ async function runTouch() {
     await closeDialogue(page, true)
   }
   // Default pitch looks along the horizon, so nearby props sit just out of frame.
-  // A mouse drag upward raises the camera; touch drag still does not orbit.
+  // A mouse drag upward raises the camera. A touch drag orbits as well.
   await orbit(page, 0, -170)
   for (const id of ['baobab', 'volcano-0', 'volcano-2']) {
     if (opened.has(id)) continue

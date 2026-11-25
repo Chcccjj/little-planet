@@ -161,10 +161,11 @@ async function runTouch() {
   results.touch.dialogueStick = { approached, residual, resumedMove }
 
   const rose = await focus(page, 'rose')
+  const beforeDrag = await page.evaluate(() => window.__littlePlanet.state())
   await touchDrag(page, rose.x - 10, rose.y, rose.x + 70, rose.y + 12)
   await page.waitForTimeout(200)
   const dragged = await page.evaluate(() => window.__littlePlanet.state())
-  if (dragged.dialogueOpen || dragged.lastTriggerId) {
+  if (dragged.dialogueOpen || dragged.lastTriggerId !== beforeDrag.lastTriggerId) {
     throw new Error(`drag opened an interaction: ${JSON.stringify(dragged)}`)
   }
   const roseTap = await focus(page, 'rose')
