@@ -29,4 +29,6 @@ export const lines = {
     '有一天，我把这把椅子挪了四十四次，太阳就沉了四十四回。',
     '天色会慢慢暖起来，再自己走回去；想再看，就把椅子再挪一次。',
   ],
+  /** Shown when the chair is tapped again before dusk has faded. */
+  chairWait: ['太阳还没回来……'],
 } as const

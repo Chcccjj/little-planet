@@ -21,4 +21,6 @@ export const palette = {
   duskFog: '#C3B4B6',
   /** Mist gray dark enough to read on off-white. */
   ink: '#5C656E',
+  /** Page-turn cue. About 4.9:1 on off-white, still a low-saturation gray. */
+  cue: '#5F6872',
 } as const

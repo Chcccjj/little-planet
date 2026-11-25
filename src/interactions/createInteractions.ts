@@ -1,4 +1,5 @@
 import {
+  Mesh,
   Raycaster,
   Vector2,
   Vector3,
@@ -16,10 +17,12 @@ import { lines } from './lines'
 import { trackTaps } from './pointerTap'
 import { createSunset } from './sunset'
 
-/** Extra reach past the collision shell, so a hint appears as you walk up. */
+/** Extra reach past the collision shell. The hint and the E key use it. A pointer tap does not. */
 const REACH_MARGIN = 0.95
 /** Forgiving radius for a thumb that lands beside a small prop. */
 const SCREEN_SLOP_PX = 46
+/** Planet hits this much closer than the prop count as the asteroid in the way. */
+const OCCLUDE_SLACK = 0.05
 
 interface Item {
   id: string
@@ -62,6 +65,8 @@ export interface InteractionDebug {
   ids(): string[]
   stand(id: string): StandPoint | null
   project(id: string): { x: number; y: number } | null
+  /** Same ray the pointer uses. Null when the planet is in the way or the pixel misses. */
+  pick(clientX: number, clientY: number): string | null
   state(): InteractionState
   previewSunset(amount: number): void
   restoreSunset(): void
@@ -76,13 +81,14 @@ export interface Interactions {
 }
 
 /**
- * Proximity, pointer taps, and the picture-book dialogue.
+ * Proximity for the hint and the E key, ray picks for taps, and the dialogue.
  * Another prop is another Item; locomotion only sees `blocksMovement`.
  */
 export function createInteractions(
   view: SceneContext,
   props: PlanetProps,
   surface: SurfaceProbe,
+  planet: Mesh,
   getPosition: () => Vector3,
 ): Interactions {
   const items: Item[] = []
@@ -137,13 +143,15 @@ export function createInteractions(
   const raycaster = new Raycaster()
   const ndc = new Vector2()
   const hits: Intersection[] = []
+  const planetHits: Intersection[] = []
   const scratch = new Vector3()
   const camForward = new Vector3()
   const toPoint = new Vector3()
   let pixelX = 0
   let pixelY = 0
 
-  const inReach = (item: Item) => getPosition().distanceToSquared(item.center) <= item.reach * item.reach
+  const planetBlocks = (distance: number) =>
+    planetHits.length > 0 && planetHits[0].distance + OCCLUDE_SLACK < distance
 
   const closest = (): Item | null => {
     const position = getPosition()
@@ -177,16 +185,23 @@ export function createInteractions(
   const screenFallback = (clientX: number, clientY: number): Item | null => {
     let best: Item | null = null
     let bestD = SCREEN_SLOP_PX * SCREEN_SLOP_PX
+    const width = window.innerWidth
+    const height = window.innerHeight
     view.camera.getWorldDirection(camForward)
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
-      if (!inReach(item)) continue
       scratch.copy(item.center).addScaledVector(item.up, item.aimLift)
       toPoint.subVectors(scratch, view.camera.position)
-      if (toPoint.dot(camForward) <= 0.15) continue
+      const aimDist = toPoint.length()
+      if (aimDist < 1e-4 || toPoint.dot(camForward) <= 0.15) continue
+      toPoint.multiplyScalar(1 / aimDist)
+      raycaster.ray.set(view.camera.position, toPoint)
+      planetHits.length = 0
+      raycaster.intersectObject(planet, false, planetHits)
+      if (planetBlocks(aimDist)) continue
       scratch.project(view.camera)
-      const x = (scratch.x * 0.5 + 0.5) * window.innerWidth
-      const y = (-scratch.y * 0.5 + 0.5) * window.innerHeight
+      const x = (scratch.x * 0.5 + 0.5) * width
+      const y = (-scratch.y * 0.5 + 0.5) * height
       const dx = x - clientX
       const dy = y - clientY
       const dist = dx * dx + dy * dy
@@ -203,14 +218,17 @@ export function createInteractions(
     const height = Math.max(window.innerHeight, 1)
     ndc.set((clientX / width) * 2 - 1, -(clientY / height) * 2 + 1)
     raycaster.setFromCamera(ndc, view.camera)
+    planet.updateWorldMatrix(true, false)
     for (let i = 0; i < pickMeshes.length; i++) pickMeshes[i].updateWorldMatrix(true, false)
     hits.length = 0
+    planetHits.length = 0
     raycaster.intersectObjects(pickMeshes, false, hits)
-    for (let i = 0; i < hits.length; i++) {
-      const resolve = resolvers.get(hits[i].object)
-      if (!resolve) continue
-      const item = resolve(hits[i].point)
-      if (inReach(item)) return item
+    raycaster.intersectObject(planet, false, planetHits)
+    // Distance is only for E and the hint. A tap opens whatever the ray
+    // actually sees, including a prop the prince has not walked up to.
+    if (hits.length > 0 && !planetBlocks(hits[0].distance)) {
+      const resolve = resolvers.get(hits[0].object)
+      if (resolve) return resolve(hits[0].point)
     }
     return screenFallback(clientX, clientY)
   }
@@ -218,7 +236,10 @@ export function createInteractions(
   const activate = (item: Item, via: string) => {
     lastTriggerId = item.id
     lastTriggerPointer = via
-    if (item.sunset) sunset.start()
+    if (item.sunset && !sunset.start()) {
+      dialogue.open(lines.chairWait)
+      return
+    }
     dialogue.open(item.lines)
   }
 
@@ -317,6 +338,9 @@ export function createInteractions(
         if (!item) return null
         if (!projectLift(item.center, item.up, item.aimLift, view.camera)) return null
         return { x: pixelX, y: pixelY }
+      },
+      pick(clientX: number, clientY: number): string | null {
+        return pick(clientX, clientY)?.id ?? null
       },
       state(): InteractionState {
         const snap = dialogue.snapshot()

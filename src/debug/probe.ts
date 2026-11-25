@@ -21,6 +21,7 @@ export interface LittlePlanetProbe {
   read(): PlanetReadout
   focus(id: string, yawPx?: number, pitchPx?: number): { x: number; y: number; near: string | null } | null
   project(id: string): { x: number; y: number } | null
+  pick(clientX: number, clientY: number): string | null
   state(): InteractionState
   maxDrawCalls(): { calls: number; triangles: number }
 }
@@ -83,6 +84,9 @@ export function installProbe(sources: {
     },
     project(id: string) {
       return debug.project(id)
+    },
+    pick(clientX: number, clientY: number) {
+      return debug.pick(clientX, clientY)
     },
     state() {
       return debug.state()

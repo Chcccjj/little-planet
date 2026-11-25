@@ -192,7 +192,7 @@ function ensureStyle(): void {
       font-size: 12px;
       line-height: 1.4;
       letter-spacing: 0.06em;
-      color: #8b939c;
+      color: ${palette.cue};
     }
   `
   document.head.appendChild(style)

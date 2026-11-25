@@ -47,7 +47,7 @@ function boot(container: HTMLElement): void {
   assertSpawnIsClear(locomotion.position, props.colliders)
 
   const follow = new FollowCamera(view.camera, surface, props.colliders)
-  const interactions = createInteractions(view, props, surface, () => locomotion.position)
+  const interactions = createInteractions(view, props, surface, planet, () => locomotion.position)
   const input = createInput(view.renderer.domElement)
   const frame = createFrameInput()
   const perf = createPerfPanel(view.renderer)

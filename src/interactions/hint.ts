@@ -11,13 +11,20 @@ export function createHint(): HintView {
   ensureStyle()
   const el = document.createElement('p')
   el.className = 'interact-hint'
-  el.textContent = 'E / 点击'
   el.hidden = true
   el.setAttribute('aria-hidden', 'true')
   document.body.append(el)
 
+  const coarse = window.matchMedia('(pointer: coarse)')
+  const syncLabel = () => {
+    el.textContent = coarse.matches ? '轻触' : 'E / 点击'
+  }
+  syncLabel()
+  coarse.addEventListener('change', syncLabel)
+
   return {
     show(x: number, y: number, target: string): void {
+      syncLabel()
       el.hidden = false
       el.dataset.target = target
       const width = el.offsetWidth || 72
@@ -32,6 +39,7 @@ export function createHint(): HintView {
       delete el.dataset.target
     },
     dispose(): void {
+      coarse.removeEventListener('change', syncLabel)
       el.remove()
     },
   }

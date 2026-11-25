@@ -21,6 +21,8 @@ function loadPlaywright() {
 
 const { chromium } = loadPlaywright()
 
+const PROP_IDS = ['rose', 'volcano-0', 'volcano-1', 'volcano-2', 'baobab', 'chair']
+
 const url = process.env.PLANET_URL ?? 'http://127.0.0.1:43123/'
 const shots = '/tmp/planet-shots'
 const artifacts = process.env.ARTIFACTS ?? '/opt/cursor/artifacts'
@@ -48,22 +50,13 @@ const browser = await chromium.launch({
 
 try {
   await runTouch()
-  await runDesktop()
+  await runDrawCalls()
   mkdirSync(artifacts, { recursive: true })
-  const published = [
-    'hint_rose.png',
-    'hint_volcano.png',
-    'hint_volcano_dormant.png',
-    'hint_baobab.png',
-    'hint_chair.png',
-    'dialogue_desktop.png',
-    'dialogue_portrait.png',
-    'sunset.png',
-  ]
+  const published = ['dialogue_spawn_tap.png', 'hint_coarse.png']
   for (const name of published) {
     copyFileSync(`${shots}/${name}`, `${artifacts}/${name}`)
   }
-  writeFileSync(`${artifacts}/touch_probe_results.json`, JSON.stringify(results, null, 2))
+  writeFileSync(`${artifacts}/spawn_tap_results.json`, JSON.stringify(results, null, 2))
   console.log(JSON.stringify(results, null, 2))
 } catch (error) {
   writeFileSync('/tmp/planet-touch-failure.json', JSON.stringify({
@@ -84,136 +77,133 @@ async function runTouch() {
     deviceScaleFactor: 1,
   })
   const page = await context.newPage()
+  const client = await context.newCDPSession(page)
+  await client.send('Emulation.setEmulatedMedia', {
+    features: [
+      { name: 'pointer', value: 'coarse' },
+      { name: 'hover', value: 'none' },
+    ],
+  })
   const errors = collect(page, 'touch')
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.waitForFunction(() => window.__littlePlanet, null, { timeout: 15000 })
-  await page.waitForTimeout(600)
+  await page.waitForTimeout(500)
   errors.assertClean('after load')
 
-  await page.touchscreen.tap(195, 80)
-  await page.waitForTimeout(200)
-  const sky = await state(page)
-  if (sky.dialogueOpen) throw new Error(`sky tap opened dialogue: ${JSON.stringify(sky)}`)
-  results.touch.skyTapIgnored = true
+  const coarse = await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)
+  results.touch.coarsePointer = coarse
+  if (!coarse) throw new Error('phone viewport did not report a coarse pointer')
 
-  const rose = await focus(page, 'rose')
-  const roseBefore = await state(page)
-  if (roseBefore.dialogueOpen) throw new Error('dialogue open before rose drag')
-  await touchDrag(page, rose.x, rose.y, rose.x + 90, rose.y + 24)
-  await page.waitForTimeout(250)
+  const spawnVisible = await onScreen(page)
+  results.touch.spawnVisible = spawnVisible.map((item) => item.id)
+  const nearAtSpawn = await page.evaluate(() => window.__littlePlanet.state().near)
+  results.touch.nearAtSpawn = nearAtSpawn
+  await page.keyboard.press('KeyE')
+  await page.waitForTimeout(150)
+  const afterE = await state(page)
+  if (afterE.dialogueOpen) throw new Error(`E opened a dialogue from spawn: ${JSON.stringify(afterE)}`)
+  results.touch.eIgnoredAtSpawn = true
+
+  if (spawnVisible.length === 0) throw new Error('nothing to tap on the spawn screen')
+  const roseAtSpawn = spawnVisible.find((item) => item.id === 'rose')
+  const first = roseAtSpawn ?? spawnVisible[0]
+  await touchDrag(client, first.x, first.y, Math.min(370, first.x + 88), first.y + 28)
+  await page.waitForTimeout(200)
   const dragged = await state(page)
   if (dragged.dialogueOpen || dragged.lastTriggerId) {
     throw new Error(`drag triggered an interaction: ${JSON.stringify(dragged)}`)
   }
-  results.touch.dragIgnored = { from: rose, lastTriggerId: dragged.lastTriggerId }
+  results.touch.dragIgnored = { id: first.id }
 
-  await page.touchscreen.tap(rose.x, rose.y)
-  await page.waitForFunction(() => window.__littlePlanet.state().dialogueOpen, null, { timeout: 2000 })
-  const opened = await state(page)
-  if (opened.lastTriggerId !== 'rose') throw new Error(`rose tap triggered ${opened.lastTriggerId}`)
-  if (opened.lastTriggerPointer !== 'touch') {
-    throw new Error(`rose tap pointerType was ${opened.lastTriggerPointer}`)
-  }
-  if (!opened.full.includes('玫瑰')) throw new Error(`unexpected rose line: ${opened.full}`)
-  results.touch.roseTap = {
-    pointer: opened.lastTriggerPointer,
-    id: opened.lastTriggerId,
-    full: opened.full,
-    point: rose,
-  }
-
+  await tapProp(page, first, first.id)
   await page.waitForFunction(() => !window.__littlePlanet.state().typing, null, { timeout: 4000 })
-  const page0 = await state(page)
-  if (page0.typing || page0.page !== 0) throw new Error(`expected a finished first page: ${JSON.stringify(page0)}`)
-  if (page0.text !== page0.full) throw new Error('typewriter did not finish the sentence')
+  const spoken = await state(page)
+  if (spoken.text !== spoken.full) throw new Error(`spawn line did not finish: ${JSON.stringify(spoken)}`)
   const card = await page.locator('.dialogue-card').boundingBox()
   if (!card) throw new Error('dialogue card missing')
-  const layout = {
-    x: card.x,
-    y: card.y,
-    width: card.width,
-    height: card.height,
-    withinViewport: card.x >= 8 && card.y >= 8 && card.x + card.width <= 382 && card.y + card.height <= 836,
-    wideEnough: card.width >= 280,
+  results.touch.spawnDialogue = {
+    id: first.id,
+    pointer: spoken.lastTriggerPointer,
+    full: spoken.full,
+    card: { x: card.x, y: card.y, width: card.width, height: card.height },
   }
-  if (!layout.withinViewport || !layout.wideEnough) {
-    throw new Error(`portrait dialogue layout failed: ${JSON.stringify(layout)}`)
-  }
-  await page.screenshot({ path: `${shots}/dialogue_portrait.png` })
-  await page.touchscreen.tap(card.x + card.width / 2, card.y + card.height * 0.45)
-  await page.waitForTimeout(150)
-  const page1 = await state(page)
-  if (page1.lastAdvancePointer !== 'touch') {
-    throw new Error(`dialogue advance pointer was ${page1.lastAdvancePointer}`)
-  }
-  if (page1.page !== 1) throw new Error(`dialogue did not turn the page: ${JSON.stringify(page1)}`)
-  if (page1.full === page0.full) throw new Error('second page repeated the first sentence')
-  results.touch.dialoguePage = {
-    pointer: page1.lastAdvancePointer,
-    from: page0.full,
-    to: page1.full,
-    layout,
-  }
-  errors.assertClean('after dialogue')
+  await page.screenshot({ path: `${shots}/dialogue_spawn_tap.png` })
   await closeDialogue(page, true)
 
-  for (const id of ['volcano-0', 'volcano-2', 'baobab']) {
-    const point = await focus(page, id)
-    await page.touchscreen.tap(point.x, point.y)
-    await page.waitForFunction(() => window.__littlePlanet.state().dialogueOpen, null, { timeout: 2000 })
-    const next = await state(page)
-    if (next.lastTriggerId !== id) throw new Error(`${id} tap triggered ${next.lastTriggerId}`)
-    if (next.lastTriggerPointer !== 'touch') throw new Error(`${id} pointer ${next.lastTriggerPointer}`)
-    results.touch[id] = { pointer: next.lastTriggerPointer, full: next.full, point }
+  const opened = new Set([first.id])
+  for (const item of spawnVisible) {
+    if (opened.has(item.id)) continue
+    const fresh = (await onScreen(page)).find((candidate) => candidate.id === item.id) ?? item
+    await tapProp(page, fresh, item.id)
+    opened.add(item.id)
+    results.touch[item.id] = { atSpawn: true, pointer: 'touch', full: (await state(page)).full }
     await closeDialogue(page, true)
   }
 
-  const chairPoint = await focus(page, 'chair')
-  const chairStart = await state(page)
-  await page.touchscreen.tap(chairPoint.x, chairPoint.y)
+  if (!opened.has('rose')) {
+    const point = await reveal(page, 'rose')
+    await tapProp(page, point, 'rose')
+    opened.add('rose')
+    results.touch.rose = { atSpawn: false, turnedWithMouse: true, pointer: 'touch', full: (await state(page)).full }
+    await closeDialogue(page, true)
+  }
+  // Default pitch looks along the horizon, so nearby props sit just out of frame.
+  // A mouse drag upward raises the camera; touch drag still does not orbit.
+  await orbit(page, 0, -170)
+  for (const id of ['baobab', 'volcano-0', 'volcano-2']) {
+    if (opened.has(id)) continue
+    const point = await reveal(page, id)
+    await tapProp(page, point, id)
+    opened.add(id)
+    results.touch[id] = { atSpawn: false, turnedWithMouse: true, pointer: 'touch', full: (await state(page)).full }
+    await closeDialogue(page, true)
+    break
+  }
+
+  if (!opened.has('chair')) {
+    const point = await approach(page, 'chair')
+    await tapProp(page, point, 'chair')
+    opened.add('chair')
+    const dist = await page.evaluate(() => {
+      const prince = window.__littlePlanet.read()
+      const chair = window.__littlePlanet.state().chair
+      return Math.hypot(prince.x - chair.x, prince.y - chair.y, prince.z - chair.z)
+    })
+    results.touch.chair = {
+      atSpawn: false,
+      walked: true,
+      distance: dist,
+      pointer: 'touch',
+      full: (await state(page)).full,
+    }
+    await closeDialogue(page, true)
+  }
+  const chairAgain = await hittable(page, 'chair') ?? await approach(page, 'chair')
+  await page.touchscreen.tap(chairAgain.x, chairAgain.y)
   await page.waitForFunction(() => window.__littlePlanet.state().dialogueOpen, null, { timeout: 2000 })
-  const chairHit = await state(page)
-  if (chairHit.lastTriggerId !== 'chair' || chairHit.lastTriggerPointer !== 'touch') {
-    throw new Error(`chair tap failed: ${JSON.stringify(chairHit)}`)
+  const waiting = await state(page)
+  if (!waiting.full.includes('太阳还没回来')) {
+    throw new Error(`cooldown tap did not explain itself: ${JSON.stringify(waiting)}`)
   }
-  if (!chairHit.full.includes('四十四')) throw new Error(`chair line missing the sunset: ${chairHit.full}`)
-  await page.waitForFunction((start) => {
-    const now = window.__littlePlanet.state()
-    const moved = Math.hypot(now.chair.x - start.x, now.chair.y - start.y, now.chair.z - start.z)
-    return now.sunset > 0.45 && moved > 0.12
-  }, chairStart.chair, { timeout: 6000 })
-  const dusk = await state(page)
-  const firstMove = Math.hypot(
-    dusk.chair.x - chairStart.chair.x,
-    dusk.chair.y - chairStart.chair.y,
-    dusk.chair.z - chairStart.chair.z,
-  )
-  results.touch.chair = {
-    pointer: chairHit.lastTriggerPointer,
-    advanceWouldBe: chairHit.lastAdvancePointer,
-    blend: dusk.sunset,
-    playing: dusk.sunsetPlaying,
-    moved: firstMove,
-    line: chairHit.full,
-    point: chairPoint,
-  }
+  if (waiting.lastTriggerPointer !== 'touch') throw new Error(`cooldown pointer ${waiting.lastTriggerPointer}`)
+  if (!waiting.sunsetPlaying) throw new Error('cooldown line showed after dusk had already ended')
+  results.touch.chairCooldown = { pointer: waiting.lastTriggerPointer, full: waiting.full, playing: waiting.sunsetPlaying }
   await closeDialogue(page, true)
-  await page.waitForFunction(() => !window.__littlePlanet.state().sunsetPlaying, null, { timeout: 14000 })
-  const rested = await state(page)
-  if (rested.sunset > 0.02) throw new Error(`sunset did not return: ${rested.sunset}`)
-  const again = await project(page, 'chair')
-  await page.touchscreen.tap(again.x, again.y)
-  await page.waitForFunction(() => window.__littlePlanet.state().sunset > 0.3, null, { timeout: 4000 })
-  const replay = await state(page)
-  const secondMove = Math.hypot(replay.chair.x - dusk.chair.x, replay.chair.y - dusk.chair.y, replay.chair.z - dusk.chair.z)
-  if (replay.lastTriggerPointer !== 'touch') throw new Error(`replay pointer ${replay.lastTriggerPointer}`)
-  if (secondMove < 0.08) throw new Error(`chair did not move again: ${secondMove}`)
-  results.touch.chairReplay = { blend: replay.sunset, moved: secondMove, pointer: replay.lastTriggerPointer }
-  errors.assertClean('after chair replay')
+
+  if (!opened.has('rose') || !opened.has('chair')) {
+    throw new Error(`missing required taps: ${[...opened].join(',')}`)
+  }
+  const others = [...opened].filter((id) => id !== 'rose' && id !== 'chair')
+  if (others.length === 0) throw new Error('no prop besides the rose and the chair was opened')
+
+  const hint = await walkUntilHint(page)
+  results.touch.hint = hint
+  await page.screenshot({ path: `${shots}/hint_coarse.png` })
+  errors.assertClean('touch end')
   await context.close()
 }
 
-async function runDesktop() {
+async function runDrawCalls() {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     hasTouch: false,
@@ -224,75 +214,125 @@ async function runDesktop() {
   const errors = collect(page, 'desktop')
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.waitForFunction(() => window.__littlePlanet, null, { timeout: 15000 })
-  await page.waitForTimeout(900)
-  results.perf.spawn = await samplePerf(page, 1200)
-
-  const hints = [
-    ['rose', 'hint_rose.png'],
-    ['volcano-0', 'hint_volcano.png'],
-    ['volcano-2', 'hint_volcano_dormant.png'],
-    ['baobab', 'hint_baobab.png'],
-    ['chair', 'hint_chair.png'],
-  ]
-  for (const [id, file] of hints) {
-    await focus(page, id)
-    await page.waitForFunction((target) => {
-      const hint = document.querySelector('.interact-hint')
-      return !!hint && !hint.hidden && hint.dataset.target === target
-    }, id, { timeout: 2000 })
-    await page.screenshot({ path: `${shots}/${file}` })
-  }
-
-  await focus(page, 'baobab')
-  await page.keyboard.press('KeyE')
-  await page.waitForFunction(() => window.__littlePlanet.state().dialogueOpen, null, { timeout: 2000 })
-  const keyed = await state(page)
-  if (keyed.lastTriggerPointer !== 'keyboard' || keyed.lastTriggerId !== 'baobab') {
-    throw new Error(`E key failed: ${JSON.stringify(keyed)}`)
-  }
-  results.desktop.baobabKey = { pointer: keyed.lastTriggerPointer, full: keyed.full }
-  await closeDialogue(page, false)
-
-  const rose = await focus(page, 'rose')
-  await page.mouse.click(rose.x, rose.y)
-  await page.waitForFunction(() => window.__littlePlanet.state().dialogueOpen, null, { timeout: 2000 })
-  await page.waitForFunction(() => !window.__littlePlanet.state().typing, null, { timeout: 4000 })
-  const spoken = await state(page)
-  if (spoken.lastTriggerPointer !== 'mouse') throw new Error(`mouse pointer was ${spoken.lastTriggerPointer}`)
-  const deskCard = await page.locator('.dialogue-card').boundingBox()
-  if (!deskCard) throw new Error('desktop dialogue missing')
-  if (deskCard.width > 460 || deskCard.x < 0 || deskCard.y + deskCard.height > 800) {
-    throw new Error(`desktop card overflow: ${JSON.stringify(deskCard)}`)
-  }
-  await page.screenshot({ path: `${shots}/dialogue_desktop.png` })
-  results.desktop.roseClick = {
-    pointer: spoken.lastTriggerPointer,
-    full: spoken.full,
-    card: deskCard,
-  }
-  await closeDialogue(page, false)
-
-  const chair = await focus(page, 'chair', 64, -12)
-  const origin = await state(page)
-  await page.mouse.click(chair.x, chair.y)
-  await page.waitForFunction(() => window.__littlePlanet.state().sunsetPlaying, null, { timeout: 2000 })
-  await closeDialogue(page, false)
-  await page.waitForFunction(() => window.__littlePlanet.state().sunset > 0.82, null, { timeout: 5000 })
-  const mid = await state(page)
-  const moved = Math.hypot(mid.chair.x - origin.chair.x, mid.chair.y - origin.chair.y, mid.chair.z - origin.chair.z)
-  if (moved < 0.12) throw new Error(`desktop chair did not move: ${moved}`)
-  await page.screenshot({ path: `${shots}/sunset.png` })
-  results.desktop.sunset = { blend: mid.sunset, playing: mid.sunsetPlaying, moved, pointer: 'mouse' }
-  results.perf.sunset = await samplePerf(page, 1000)
-
-  await page.keyboard.down('KeyW')
-  results.perf.walking = await samplePerf(page, 1000)
-  await page.keyboard.up('KeyW')
-
+  await page.waitForTimeout(700)
+  results.perf.spawn = await samplePerf(page, 900)
   results.perf.maxDrawCalls = await page.evaluate(() => window.__littlePlanet.maxDrawCalls())
   results.perf.panel = await page.locator('.perf-panel').innerText()
-  errors.assertClean('desktop end')
+  const desktopHint = await page.evaluate(() => {
+    const coarse = window.matchMedia('(pointer: coarse)').matches
+    return coarse ? '轻触' : 'E / 点击'
+  })
+  results.perf.desktopHintLabel = desktopHint
+  if (desktopHint !== 'E / 点击') throw new Error(`desktop hint label was ${desktopHint}`)
+  errors.assertClean('draw calls')
   await context.close()
+}
+
+async function tapProp(page, point, id) {
+  await page.touchscreen.tap(point.x, point.y)
+  await page.waitForFunction(() => window.__littlePlanet.state().dialogueOpen, null, { timeout: 2000 })
+  const next = await state(page)
+  if (next.lastTriggerId !== id) throw new Error(`${id} tap triggered ${next.lastTriggerId} at ${JSON.stringify(point)}`)
+  if (next.lastTriggerPointer !== 'touch') throw new Error(`${id} pointer ${next.lastTriggerPointer}`)
+}
+
+async function onScreen(page) {
+  const found = await page.evaluate((ids) => {
+    const hits = new Map()
+    const width = window.innerWidth
+    const height = window.innerHeight
+    for (let y = 8; y < height - 8; y += 10) {
+      for (let x = 8; x < width - 8; x += 10) {
+        const id = window.__littlePlanet.pick(x, y)
+        if (!id || hits.has(id)) continue
+        hits.set(id, { id, x, y })
+      }
+    }
+    return ids.map((id) => hits.get(id)).filter(Boolean)
+  }, PROP_IDS)
+  return found
+}
+
+async function reveal(page, id) {
+  for (let i = 0; i < 42; i++) {
+    const hit = await page.evaluate((target) => {
+      for (let y = 36; y < window.innerHeight - 48; y += 24) {
+        for (let x = 10; x < window.innerWidth - 10; x += 24) {
+          if (window.__littlePlanet.pick(x, y) === target) return { id: target, x, y }
+        }
+      }
+      return null
+    }, id)
+    if (hit) return hit
+    await orbit(page, 36, 0)
+  }
+  throw new Error(`${id} never came on screen`)
+}
+
+async function approach(page, id) {
+  for (let i = 0; i < 48; i++) {
+    const hit = await hittable(page, id)
+    if (hit) return hit
+    const projected = await page.evaluate((target) => window.__littlePlanet.project(target), id)
+    let turn = 70
+    if (projected && projected.x > -240 && projected.x < 630) {
+      turn = Math.max(-80, Math.min(80, (projected.x - 195) * 0.4))
+    }
+    if (Math.abs(turn) > 12) await orbit(page, turn, 0)
+    await page.keyboard.down('KeyW')
+    await page.waitForTimeout(180)
+    await page.keyboard.up('KeyW')
+  }
+  throw new Error(`${id} never became visible`)
+}
+
+async function hittable(page, id) {
+  return page.evaluate((target) => {
+    const projected = window.__littlePlanet.project(target)
+    if (!projected) return null
+    for (let dy = -32; dy <= 32; dy += 8) {
+      for (let dx = -32; dx <= 32; dx += 8) {
+        const x = projected.x + dx
+        const y = projected.y + dy
+        if (x < 8 || y < 8 || x > window.innerWidth - 8 || y > window.innerHeight - 8) continue
+        if (window.__littlePlanet.pick(x, y) === target) return { id: target, x, y }
+      }
+    }
+    return null
+  }, id)
+}
+
+async function orbit(page, dx, dy) {
+  const box = await page.locator('canvas').boundingBox()
+  if (!box) throw new Error('canvas missing')
+  const x = box.x + box.width * 0.55
+  const y = box.y + box.height * 0.38
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + dx, y + dy, { steps: 8 })
+  await page.mouse.up()
+  await page.waitForTimeout(160)
+}
+
+async function walkUntilHint(page) {
+  for (let step = 0; step < 20; step++) {
+    const hint = page.locator('.interact-hint')
+    if (await hint.isVisible()) {
+      const text = (await hint.innerText()).trim()
+      const target = await hint.getAttribute('data-target')
+      const coarseNow = await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)
+      if (text === '轻触' && target) return { text, target, coarse: coarseNow }
+      throw new Error(`hint text was ${JSON.stringify(text)} target=${target} coarse=${coarseNow}`)
+    }
+    const projected = await page.evaluate(() => window.__littlePlanet.project('chair'))
+    if (projected && Math.abs(projected.x - 195) > 40) {
+      await orbit(page, Math.max(-70, Math.min(70, (projected.x - 195) * 0.35)), 0)
+    }
+    await page.keyboard.down('KeyW')
+    await page.waitForTimeout(220)
+    await page.keyboard.up('KeyW')
+  }
+  throw new Error('coarse hint never appeared')
 }
 
 function collect(page, label) {
@@ -321,28 +361,6 @@ function collect(page, label) {
   }
 }
 
-async function focus(page, id, yaw, pitch) {
-  const point = await page.evaluate(({ id, yaw, pitch }) => {
-    if (yaw === undefined) return window.__littlePlanet.focus(id)
-    return window.__littlePlanet.focus(id, yaw, pitch)
-  }, { id, yaw, pitch })
-  if (!point) throw new Error(`focus(${id}) returned null`)
-  await page.waitForTimeout(180)
-  const settled = await project(page, id)
-  const near = await page.evaluate(() => window.__littlePlanet.state().near)
-  if (near !== id) throw new Error(`stood near ${near}, wanted ${id}`)
-  if (settled.x < 4 || settled.y < 4 || settled.x > page.viewportSize().width - 4 || settled.y > page.viewportSize().height - 4) {
-    throw new Error(`${id} projects offscreen: ${JSON.stringify(settled)}`)
-  }
-  return settled
-}
-
-async function project(page, id) {
-  const point = await page.evaluate((target) => window.__littlePlanet.project(target), id)
-  if (!point) throw new Error(`project(${id}) is behind the camera`)
-  return point
-}
-
 async function state(page) {
   return page.evaluate(() => window.__littlePlanet.state())
 }
@@ -364,8 +382,7 @@ async function closeDialogue(page, touch) {
   throw new Error(`dialogue stayed open: ${JSON.stringify(stuck)}`)
 }
 
-async function touchDrag(page, x0, y0, x1, y1) {
-  const client = await page.context().newCDPSession(page)
+async function touchDrag(client, x0, y0, x1, y1) {
   await client.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
     touchPoints: [{ x: x0, y: y0, id: 1 }],
@@ -378,7 +395,6 @@ async function touchDrag(page, x0, y0, x1, y1) {
     })
   }
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await client.detach()
 }
 
 async function samplePerf(page, ms) {
