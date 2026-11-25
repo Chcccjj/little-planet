@@ -17,7 +17,18 @@ export interface SceneContext {
   renderer: WebGLRenderer
 }
 
-const MAX_PIXEL_RATIO = 2
+const DESKTOP_PIXEL_RATIO = 2
+const COARSE_PIXEL_RATIO = 1.5
+
+/**
+ * Antialias plus a 1024 shadow map is heavy on mid-range phones, so coarse
+ * pointers (touch) cap DPR at 1.5. Desktop mice stay at 2. Read again on resize.
+ */
+export function rendererPixelRatio(): number {
+  const coarse = window.matchMedia('(pointer: coarse)').matches
+  const cap = coarse ? COARSE_PIXEL_RATIO : DESKTOP_PIXEL_RATIO
+  return Math.min(window.devicePixelRatio || 1, cap)
+}
 
 /**
  * Picture-book stage: misty fog, a soft sky fill, and one warm key light
@@ -37,7 +48,7 @@ export function createScene(container: HTMLElement): SceneContext {
   })
   renderer.outputColorSpace = SRGBColorSpace
   renderer.shadowMap.enabled = true
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
+  renderer.setPixelRatio(rendererPixelRatio())
   container.appendChild(renderer.domElement)
 
   // Sky-to-ground fill keeps the night side of the asteroid in mist, not black.
@@ -75,6 +86,6 @@ export function resizeScene(ctx: SceneContext): void {
   const height = Math.max(window.innerHeight, 1)
   ctx.camera.aspect = width / height
   ctx.camera.updateProjectionMatrix()
-  ctx.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO))
+  ctx.renderer.setPixelRatio(rendererPixelRatio())
   ctx.renderer.setSize(width, height)
 }

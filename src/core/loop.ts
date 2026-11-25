@@ -4,7 +4,7 @@ const MAX_DELTA_SECONDS = 0.05
 
 /**
  * requestAnimationFrame loop. Delta is capped so a backgrounded tab
- * cannot fling the idle orbit when the page becomes visible again.
+ * cannot fling the prince across the asteroid when the page becomes visible again.
  */
 export function startLoop(update: FrameUpdate): void {
   let last = performance.now()

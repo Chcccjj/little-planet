@@ -84,7 +84,7 @@ export function createPlanet(): Mesh {
   planet.name = 'b612'
   planet.castShadow = true
   planet.receiveShadow = true
-  // Fixed pose so the first frame has a readable silhouette. PR 2 replaces the camera.
+  // Fixed pose. The follow camera orbits the prince; this mesh does not spin.
   planet.rotation.y = 0.55
   return planet
 }
