@@ -72,7 +72,8 @@ export function createPlanet(): Mesh {
   }
 
   geometry.setAttribute('color', new BufferAttribute(colors, 3))
-  geometry.computeVertexNormals()
+  // flatShading rebuilds face normals from screen derivatives, so the
+  // smoothed normals computeVertexNormals would write are never sampled.
   geometry.computeBoundingSphere()
 
   const material = new MeshLambertMaterial({

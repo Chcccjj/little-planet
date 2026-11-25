@@ -185,4 +185,17 @@ export class Locomotion {
     this.character.root.position.copy(this.position)
     this.character.root.quaternion.copy(this.orientation)
   }
+
+  /**
+   * Drop the prince along a world direction and face `forwardHint`.
+   * Used to frame a prop. The next `update` still owns ordinary walking.
+   */
+  relocate(direction: Vector3, forwardHint: Vector3): void {
+    frameFromUp(direction, forwardHint, this.orientation)
+    this.transport.identity()
+    this.plantOnSurface()
+    this.resolveCollisions()
+    this.refreshBasis()
+    this.syncRoot()
+  }
 }

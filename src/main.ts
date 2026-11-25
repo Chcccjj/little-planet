@@ -3,7 +3,9 @@ import { FollowCamera } from './camera/followCamera'
 import { CHARACTER_RADIUS, createCharacter } from './character/createCharacter'
 import { Locomotion } from './character/locomotion'
 import { startLoop } from './core/loop'
+import { installProbe } from './debug/probe'
 import { createPerfPanel } from './debug/perfPanel'
+import { createInteractions } from './interactions'
 import { createFrameInput, createInput } from './input'
 import { createScene, resizeScene, type SceneContext } from './scene/createScene'
 import { isWebGLAvailable, showWebGLFallback } from './scene/webglFallback'
@@ -45,6 +47,7 @@ function boot(container: HTMLElement): void {
   assertSpawnIsClear(locomotion.position, props.colliders)
 
   const follow = new FollowCamera(view.camera, surface, props.colliders)
+  const interactions = createInteractions(view, props, surface, () => locomotion.position)
   const input = createInput(view.renderer.domElement)
   const frame = createFrameInput()
   const perf = createPerfPanel(view.renderer)
@@ -58,13 +61,22 @@ function boot(container: HTMLElement): void {
   follow.align(locomotion.up, locomotion.forward)
   follow.update(0, 0, 0, 0, locomotion.position, locomotion.up)
 
-  if (import.meta.env.DEV) installProbe(locomotion, view)
+  if (import.meta.env.DEV) {
+    installProbe({ locomotion, follow, view, interactions })
+  }
 
   startLoop((dt) => {
     input.read(frame)
+    // Dialogue freezes walking. Look and zoom still belong to the input module.
+    if (interactions.blocksMovement) {
+      frame.moveX = 0
+      frame.moveY = 0
+    }
     locomotion.update(dt, frame.moveX, frame.moveY, view.camera)
     follow.transport(locomotion.transport)
     follow.update(dt, frame.lookX, frame.lookY, frame.zoom, locomotion.position, locomotion.up)
+    props.update(dt)
+    interactions.update(dt)
     view.renderer.render(view.scene, view.camera)
     perf.update()
   })
@@ -78,42 +90,5 @@ function assertSpawnIsClear(position: Vector3, colliders: readonly SphereCollide
     if (gap < min * min) {
       throw new Error(`Spawn overlaps the ${collider.name}`)
     }
-  }
-}
-
-function installProbe(locomotion: Locomotion, view: SceneContext): void {
-  const target = window as Window & {
-    __littlePlanet?: {
-      read(): {
-        x: number
-        y: number
-        z: number
-        ux: number
-        uy: number
-        uz: number
-        radius: number
-        calls: number
-        triangles: number
-        pixelRatio: number
-      }
-    }
-  }
-  target.__littlePlanet = {
-    read() {
-      const { position, up } = locomotion
-      const info = view.renderer.info.render
-      return {
-        x: position.x,
-        y: position.y,
-        z: position.z,
-        ux: up.x,
-        uy: up.y,
-        uz: up.z,
-        radius: position.length(),
-        calls: info.calls,
-        triangles: info.triangles,
-        pixelRatio: view.renderer.getPixelRatio(),
-      }
-    },
   }
 }

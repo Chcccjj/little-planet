@@ -52,7 +52,8 @@ export function createSolidMesh(parts: readonly SolidPart[], name: string): Mesh
 
   const merged = mergeGeometries(baked, false)
   for (let i = 0; i < baked.length; i++) baked[i].dispose()
-  merged.computeVertexNormals()
+  // Part normals survive the merge and keep the attribute bound. flatShading
+  // ignores them and rebuilds face normals in the fragment shader.
 
   const mesh = new Mesh(
     merged,

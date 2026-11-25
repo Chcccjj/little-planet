@@ -12,26 +12,103 @@ import { palette } from '../config/palette'
 
 const SKY_SIZE = 1024
 
+export interface SkyView {
+  readonly mesh: Mesh
+  /** 0 is the daytime wash, 1 is the full sunset painting. */
+  setBlend(amount: number): void
+}
+
+interface SkyWash {
+  stops: readonly { at: number; color: string }[]
+  stars: number
+  starFrom: number
+  starSpan: number
+  starAlpha: number
+  starAlphaSpan: number
+  seed: number
+}
+
 /**
- * Inside-out sphere with a painted gradient and a few soft stars.
- * Fog is off so the wash stays readable behind the mist around the planet.
+ * Day and sunset are two paintings on one sphere. The sunset mesh is a
+ * slightly smaller transparent shell drawn before the other transparents,
+ * so glass and smoke stay on top of the wash as it fades in.
  */
-export function createSky(): Mesh {
-  const texture = paintSky()
-  const material = new MeshBasicMaterial({
-    map: texture,
+export function createSky(): SkyView {
+  const geometry = new SphereGeometry(380, 48, 32)
+  const dayMaterial = new MeshBasicMaterial({
+    map: paintSky(DAY),
     side: BackSide,
     fog: false,
     depthWrite: false,
   })
+  const duskMaterial = new MeshBasicMaterial({
+    map: paintSky(DUSK),
+    side: BackSide,
+    fog: false,
+    depthWrite: false,
+    transparent: true,
+    opacity: 0,
+  })
 
-  const sky = new Mesh(new SphereGeometry(380, 48, 32), material)
-  sky.name = 'sky'
-  sky.frustumCulled = false
-  return sky
+  const day = new Mesh(geometry, dayMaterial)
+  day.name = 'sky'
+  day.frustumCulled = false
+  day.renderOrder = -2
+
+  const dusk = new Mesh(geometry, duskMaterial)
+  dusk.name = 'sky-sunset'
+  // Inside the daytime shell so the depth test still passes over it,
+  // and early in the transparent queue so the dome composites afterwards.
+  dusk.scale.setScalar(0.97)
+  dusk.frustumCulled = false
+  dusk.renderOrder = -1
+  dusk.visible = false
+  day.add(dusk)
+
+  return {
+    mesh: day,
+    setBlend(amount: number): void {
+      const blend = amount < 0 ? 0 : amount > 1 ? 1 : amount
+      dusk.visible = blend > 0.001
+      duskMaterial.opacity = blend
+    },
+  }
 }
 
-function paintSky(): CanvasTexture {
+const DAY: SkyWash = {
+  stops: [
+    { at: 0, color: palette.hazeBlue },
+    { at: 0.47, color: palette.hazeBlue },
+    { at: 0.58, color: palette.mistGray },
+    { at: 0.7, color: palette.offWhite },
+    { at: 1, color: palette.offWhite },
+  ],
+  stars: 140,
+  starFrom: 0.44,
+  starSpan: 0.12,
+  starAlpha: 0.78,
+  starAlphaSpan: 0.22,
+  seed: 1337,
+}
+
+const DUSK: SkyWash = {
+  stops: [
+    { at: 0, color: palette.duskViolet },
+    { at: 0.42, color: palette.duskViolet },
+    { at: 0.55, color: palette.duskLilac },
+    { at: 0.66, color: palette.warmAsh },
+    { at: 0.8, color: palette.duskMilk },
+    { at: 1, color: palette.duskMilk },
+  ],
+  stars: 64,
+  starFrom: 0.34,
+  starSpan: 0.16,
+  starAlpha: 0.28,
+  starAlphaSpan: 0.22,
+  seed: 4099,
+}
+
+function paintSky(wash: SkyWash): CanvasTexture {
   const canvas = document.createElement('canvas')
   canvas.width = SKY_SIZE
   canvas.height = SKY_SIZE
@@ -41,26 +118,24 @@ function paintSky(): CanvasTexture {
   // Stops are placed on the rows the idle orbit actually sees
   // (about 0.47 at the top of the frame to 0.71 at the bottom).
   const gradient = ctx.createLinearGradient(0, 0, 0, SKY_SIZE)
-  gradient.addColorStop(0, palette.hazeBlue)
-  gradient.addColorStop(0.47, palette.hazeBlue)
-  gradient.addColorStop(0.58, palette.mistGray)
-  gradient.addColorStop(0.7, palette.offWhite)
-  gradient.addColorStop(1, palette.offWhite)
+  for (let i = 0; i < wash.stops.length; i++) {
+    gradient.addColorStop(wash.stops[i].at, wash.stops[i].color)
+  }
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, SKY_SIZE, SKY_SIZE)
 
-  let seed = 1337
+  let seed = wash.seed
   const rand = () => {
     seed = (seed * 16807) % 2147483647
     return seed / 2147483647
   }
 
   // Stipple only the haze band. The pale horizon stays empty.
-  for (let i = 0; i < 140; i++) {
+  for (let i = 0; i < wash.stars; i++) {
     const x = rand() * SKY_SIZE
-    const y = SKY_SIZE * (0.44 + rand() * 0.12)
+    const y = SKY_SIZE * (wash.starFrom + rand() * wash.starSpan)
     const radius = 2 + rand() * 1.4
-    const alpha = 0.78 + rand() * 0.22
+    const alpha = wash.starAlpha + rand() * wash.starAlphaSpan
     const glow = ctx.createRadialGradient(x, y, 0, x, y, radius)
     glow.addColorStop(0, hexToRgba(palette.offWhite, alpha))
     glow.addColorStop(0.45, hexToRgba(palette.offWhite, alpha * 0.5))

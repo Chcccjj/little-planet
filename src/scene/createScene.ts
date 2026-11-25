@@ -1,5 +1,4 @@
 import {
-  Color,
   DirectionalLight,
   FogExp2,
   HemisphereLight,
@@ -9,12 +8,16 @@ import {
   WebGLRenderer,
 } from 'three'
 import { palette } from '../config/palette'
-import { createSky } from './sky'
+import { createSky, type SkyView } from './sky'
 
 export interface SceneContext {
   scene: Scene
   camera: PerspectiveCamera
   renderer: WebGLRenderer
+  sun: DirectionalLight
+  fill: HemisphereLight
+  fog: FogExp2
+  sky: SkyView
 }
 
 const DESKTOP_PIXEL_RATIO = 2
@@ -36,8 +39,10 @@ export function rendererPixelRatio(): number {
  */
 export function createScene(container: HTMLElement): SceneContext {
   const scene = new Scene()
-  scene.background = new Color(palette.hazeBlue)
-  scene.fog = new FogExp2(palette.mistGray, 0.015)
+  // The sky sphere covers every pixel the camera can see, so a clear color
+  // would only flash for the frames before it draws.
+  const fog = new FogExp2(palette.mistGray, 0.015)
+  scene.fog = fog
 
   const camera = new PerspectiveCamera(40, 1, 0.1, 700)
 
@@ -75,9 +80,10 @@ export function createScene(container: HTMLElement): SceneContext {
   sun.shadow.radius = 3.5
   scene.add(sun)
 
-  scene.add(createSky())
+  const sky = createSky()
+  scene.add(sky.mesh)
 
-  return { scene, camera, renderer }
+  return { scene, camera, renderer, sun, fill, fog, sky }
 }
 
 /** Full-viewport canvas. Pixel ratio is capped so high-DPI phones stay light. */
