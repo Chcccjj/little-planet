@@ -1,3 +1,4 @@
+import { isMoveCode, keyboardMove, normalizeWheelDelta } from './mapping'
 import type { FrameInput, InputDriver } from './types'
 
 /**
@@ -59,7 +60,7 @@ export function createDesktopInput(target: HTMLElement): InputDriver {
   const onWheel = (event: WheelEvent) => {
     event.preventDefault()
     if (!active) return
-    zoom += normalizeWheel(event)
+    zoom += normalizeWheelDelta(event.deltaY, event.deltaMode)
   }
 
   const onContextMenu = (event: Event) => {
@@ -79,8 +80,9 @@ export function createDesktopInput(target: HTMLElement): InputDriver {
 
   return {
     contribute(frame: FrameInput): void {
-      frame.moveX += axis(keys.has('KeyD') || keys.has('ArrowRight'), keys.has('KeyA') || keys.has('ArrowLeft'))
-      frame.moveY += axis(keys.has('KeyW') || keys.has('ArrowUp'), keys.has('KeyS') || keys.has('ArrowDown'))
+      const move = keyboardMove(keys)
+      frame.moveX += move.x
+      frame.moveY += move.y
       frame.lookX += lookX
       frame.lookY += lookY
       frame.zoom += zoom
@@ -113,26 +115,3 @@ export function createDesktopInput(target: HTMLElement): InputDriver {
   }
 }
 
-function axis(positive: boolean, negative: boolean): number {
-  return (positive ? 1 : 0) - (negative ? 1 : 0)
-}
-
-function isMoveCode(code: string): boolean {
-  return (
-    code === 'KeyW' ||
-    code === 'KeyA' ||
-    code === 'KeyS' ||
-    code === 'KeyD' ||
-    code === 'ArrowUp' ||
-    code === 'ArrowDown' ||
-    code === 'ArrowLeft' ||
-    code === 'ArrowRight'
-  )
-}
-
-/** Fold line/page wheel modes into pixels so a notch feels the same across browsers. */
-function normalizeWheel(event: WheelEvent): number {
-  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
-  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * 400
-  return event.deltaY
-}

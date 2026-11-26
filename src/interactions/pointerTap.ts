@@ -1,10 +1,10 @@
+import { exceedsTapSlop } from './tapMath'
+
 export interface TapPoint {
   clientX: number
   clientY: number
   pointerType: string
 }
-
-const SLOP_PX = 16
 
 /**
  * A tap is a primary pointer that lands within a few pixels of where it
@@ -23,7 +23,7 @@ export function trackTaps(target: HTMLElement, onTap: (tap: TapPoint) => void): 
   const onMove = (event: PointerEvent) => {
     const start = active.get(event.pointerId)
     if (!start || start.dragged) return
-    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > SLOP_PX) {
+    if (exceedsTapSlop(event.clientX - start.x, event.clientY - start.y)) {
       start.dragged = true
     }
   }
@@ -33,7 +33,7 @@ export function trackTaps(target: HTMLElement, onTap: (tap: TapPoint) => void): 
     if (!start) return
     active.delete(event.pointerId)
     if (start.dragged) return
-    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > SLOP_PX) return
+    if (exceedsTapSlop(event.clientX - start.x, event.clientY - start.y)) return
     onTap({
       clientX: event.clientX,
       clientY: event.clientY,

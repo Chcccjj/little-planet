@@ -1,4 +1,5 @@
 import { createDesktopInput } from './desktopInput'
+import { clampToUnitDisc } from './mapping'
 import { createTouchInput } from './touchInput'
 import { createFrameInput, type FrameInput, type GameInput, type InputDriver } from './types'
 
@@ -11,8 +12,11 @@ export type { FrameInput, GameInput, InputDriver }
  * Locomotion only sees `read()`.
  */
 export function createInput(target: HTMLElement): GameInput {
-  const drivers: InputDriver[] = [createDesktopInput(target), createTouchInput(target)]
+  return combineDrivers([createDesktopInput(target), createTouchInput(target)])
+}
 
+/** Sum every driver into one frame and clamp the move onto the unit disc. */
+export function combineDrivers(drivers: readonly InputDriver[]): GameInput {
   return {
     read(frame: FrameInput): void {
       frame.moveX = 0
@@ -21,12 +25,9 @@ export function createInput(target: HTMLElement): GameInput {
       frame.lookY = 0
       frame.zoom = 0
       for (let i = 0; i < drivers.length; i++) drivers[i].contribute(frame)
-      const lenSq = frame.moveX * frame.moveX + frame.moveY * frame.moveY
-      if (lenSq > 1) {
-        const inv = 1 / Math.sqrt(lenSq)
-        frame.moveX *= inv
-        frame.moveY *= inv
-      }
+      const clamped = clampToUnitDisc(frame.moveX, frame.moveY)
+      frame.moveX = clamped.x
+      frame.moveY = clamped.y
     },
     setActive(active: boolean): void {
       for (let i = 0; i < drivers.length; i++) drivers[i].setActive(active)

@@ -1,7 +1,14 @@
 import { palette } from '../config/palette'
+import {
+  advanceDialogue,
+  closeDialogue,
+  createDialogueMachine,
+  dialogueLine,
+  dialogueTyping,
+  openDialogue,
+  tickDialogue,
+} from './dialogueMachine'
 import { trackTaps } from './pointerTap'
-
-const CPS = 26
 
 export interface DialogueSnapshot {
   open: boolean
@@ -50,94 +57,57 @@ export function createDialogue(onAdvance: (via: string) => void): DialogueView {
   root.append(card)
   document.body.append(root)
 
-  let pages: readonly string[] = []
-  let page = 0
-  let shown = 0
-  let carry = 0
-  let open = false
-
-  const typing = () => open && shown < (pages[page]?.length ?? 0)
+  const state = createDialogueMachine()
 
   const sync = () => {
+    const open = state.open
     root.hidden = !open
     root.dataset.open = open ? 'true' : 'false'
-    root.dataset.page = String(page)
-    root.dataset.typing = typing() ? 'true' : 'false'
+    root.dataset.page = String(state.page)
+    root.dataset.typing = dialogueTyping(state) ? 'true' : 'false'
     root.setAttribute('aria-hidden', open ? 'false' : 'true')
     if (!open) {
       text.textContent = ''
       cue.textContent = ''
       return
     }
-    const line = pages[page] ?? ''
-    text.textContent = line.slice(0, shown)
-    if (shown < line.length) cue.textContent = '轻触看全句'
-    else if (page < pages.length - 1) cue.textContent = '轻触继续'
+    const line = dialogueLine(state)
+    text.textContent = line.slice(0, state.shown)
+    if (state.shown < line.length) cue.textContent = '轻触看全句'
+    else if (state.page < state.pages.length - 1) cue.textContent = '轻触继续'
     else cue.textContent = '轻触关上'
   }
 
   const view: DialogueView = {
     get isOpen() {
-      return open
+      return state.open
     },
     open(next: readonly string[]): void {
       if (next.length === 0) return
-      pages = next
-      page = 0
-      shown = 0
-      carry = 0
-      open = true
+      openDialogue(state, next)
       sync()
     },
     advance(): void {
-      if (!open) return
-      const line = pages[page] ?? ''
-      if (shown < line.length) {
-        shown = line.length
-        carry = 0
-        sync()
-        return
-      }
-      if (page < pages.length - 1) {
-        page += 1
-        shown = 0
-        carry = 0
-        sync()
-        return
-      }
-      open = false
-      pages = []
-      page = 0
-      shown = 0
+      if (!state.open) return
+      advanceDialogue(state)
       sync()
     },
     close(): void {
-      if (!open) return
-      open = false
-      pages = []
-      page = 0
-      shown = 0
-      carry = 0
+      if (!state.open) return
+      closeDialogue(state)
       sync()
     },
     update(dt: number): void {
-      if (!typing()) return
-      const line = pages[page] ?? ''
-      carry += dt * CPS
-      const step = Math.floor(carry)
-      if (step <= 0) return
-      carry -= step
-      shown = Math.min(line.length, shown + step)
-      sync()
+      if (tickDialogue(state, dt)) sync()
     },
     snapshot(): DialogueSnapshot {
       return {
-        open,
-        page,
-        pages: pages.length,
+        open: state.open,
+        page: state.page,
+        pages: state.pages.length,
         text: text.textContent ?? '',
-        full: pages[page] ?? '',
-        typing: typing(),
+        full: dialogueLine(state),
+        typing: dialogueTyping(state),
       }
     },
     dispose(): void {
@@ -147,7 +117,7 @@ export function createDialogue(onAdvance: (via: string) => void): DialogueView {
   }
 
   const stopTaps = trackTaps(root, (tap) => {
-    if (!open) return
+    if (!state.open) return
     onAdvance(tap.pointerType)
     view.advance()
   })
@@ -168,7 +138,11 @@ function ensureStyle(): void {
       align-items: flex-end;
       justify-content: center;
       box-sizing: border-box;
-      padding: 16px 16px calc(18px + env(safe-area-inset-bottom));
+      padding:
+        calc(12px + env(safe-area-inset-top))
+        calc(16px + env(safe-area-inset-right))
+        calc(18px + env(safe-area-inset-bottom))
+        calc(16px + env(safe-area-inset-left));
       background: transparent;
       touch-action: none;
       -webkit-tap-highlight-color: transparent;
@@ -191,6 +165,13 @@ function ensureStyle(): void {
       user-select: none;
       -webkit-user-select: none;
       cursor: pointer;
+      touch-action: pan-y;
+    }
+    @media (max-width: 380px), (max-height: 430px) {
+      .dialogue-card {
+        padding: 16px 16px 12px;
+        font-size: 16px;
+      }
     }
     .dialogue-text {
       min-height: 3.4em;

@@ -193,7 +193,7 @@ export class FollowCamera {
  * so the orbit distance grows by 1/aspect and the narrow side keeps the framing
  * the tall side already had. Recomputed every frame so resize keeps up.
  */
-function framedDistance(distance: number, aspect: number): number {
+export function framedDistance(distance: number, aspect: number): number {
   if (!(aspect > 0) || aspect >= 1) return distance
   return distance / aspect
 }

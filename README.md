@@ -15,7 +15,7 @@
 - **点一下或轻触看得见的物件**：不需要走近。射线点中、而且没被星球挡住，就打开对话。轻触和点击走的是 pointerdown / pointerup，拖动不会误触
 - **对话打开时**：走路会停住。点对话框、按 E 或空格，先把这一句补全，再翻下一页，最后一页之后关上
 
-窄屏（比如竖着的手机）会按 `1 / 宽高比` 把镜头拉远，避免左右被裁掉。触控设备把像素比封顶在 1.5，桌面仍是 2。
+窄屏（比如竖着的手机）会按 `1 / 宽高比` 把镜头拉远，避免左右被裁掉。桌面像素比最高 2。触屏默认最高 1.5；屏幕很大、内存不超过 3 GB 时降到 1.25，只有一两个核心或内存不超过 2 GB 时降到 1。开起来大约两秒后，如果半秒窗口里的帧率连续两次低于 28，像素比再降 0.25，最低到 1，并且不会自己升回去。自动化浏览器不走这一档，免得读像素的时候画布正被改大小。
 
 触屏上，左下角有一枚半透明的摇杆，按住它走路；手指在其余地方拖动是环顾，双指张开或捏合可以拉远、拉近。摇杆和环顾按 pointerId 分开，可以同时进行。轻点物件、对话框和椅子仍然会互动，拖动不会误触。对话打开时摇杆会藏起来，关上后再出现，并且不会留着刚才的推力。没有触控的桌面不显示摇杆，键鼠跟以前一样。
 
@@ -31,11 +31,13 @@
 npm install
 npm run dev        # 本地开发服务器
 npm run typecheck  # tsc --noEmit
+npm run test       # Vitest：数学、存档、输入、对话状态
+npm run test:e2e   # 先构建，再用 Playwright 打开 vite preview 做冒烟测试
 npm run build      # 生产构建
 npm run preview    # 预览生产构建
 ```
 
-`vite.config.ts` 里的 `base` 是 `'./'`，构建结果可以挂到子路径上。`three` 被拆成单独的 chunk。
+`vite.config.ts` 里的 `base` 是 `'./'`，构建结果可以挂到子路径上。入口只做 WebGL 检测，场景和 `three` 分开加载。`three` 仍是单独的 chunk。日落那张天空贴图要到第一次挪椅子时才画。玫瑰、火山和猴面包树苗合成一个网格来画，原来的网格留着做点击检测，只是不显示。
 
 开发模式下，画面左上角有一块很小的性能面板，显示 FPS、draw calls（`renderer.info.render.calls`）和三角形数量。生产构建不会包含这块面板。浏览器没有 WebGL 时，会显示一张莫兰迪色的说明，而不是空白页。
 
@@ -49,7 +51,7 @@ https://chcccjj.github.io/little-planet/
 
 首次启用：打开仓库 **Settings → Pages → Build and deployment → Source**，选择 **GitHub Actions**。之后推送到 `main` 会运行 `.github/workflows/deploy.yml`，也可以在 Actions 里手动运行 **Deploy GitHub Pages**。工作流只用仓库自带的 `GITHUB_TOKEN` 权限（`contents: read`、`pages: write`、`id-token: write`），不需要另加 secret。
 
-仓库里没有别的 CI 工作流。这一份只做类型检查、构建和发布，不代替本地的游戏检查。`public/.nojekyll` 会进到 `dist`，避免 Pages 按 Jekyll 丢掉下划线开头的文件。
+拉取请求会跑 `.github/workflows/ci.yml`：类型检查、Vitest，以及 Playwright 冒烟测试（截图作为 Actions 构件）。推送到 `main` 仍由 `.github/workflows/deploy.yml` 做类型检查、构建和发布，不跑浏览器测试，避免拖住 Pages。`public/.nojekyll` 会进到 `dist`，避免 Pages 按 Jekyll 丢掉下划线开头的文件。
 
 ## 代码结构
 
