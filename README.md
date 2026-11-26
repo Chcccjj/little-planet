@@ -35,9 +35,21 @@ npm run build      # 生产构建
 npm run preview    # 预览生产构建
 ```
 
-`vite.config.ts` 里的 `base` 是 `'./'`，构建结果可以挂到子路径上，方便以后部署。`three` 被拆成单独的 chunk。
+`vite.config.ts` 里的 `base` 是 `'./'`，构建结果可以挂到子路径上。`three` 被拆成单独的 chunk。
 
 开发模式下，画面左上角有一块很小的性能面板，显示 FPS、draw calls（`renderer.info.render.calls`）和三角形数量。生产构建不会包含这块面板。浏览器没有 WebGL 时，会显示一张莫兰迪色的说明，而不是空白页。
+
+## 上线地址
+
+格式是 `https://<GitHub用户名>.github.io/<仓库名>/`。按预计的公开仓库 `Chcccjj/little-planet`，地址是：
+
+https://chcccjj.github.io/little-planet/
+
+页面在 `/little-planet/` 这个子路径下。相对路径会跟着当前目录走，所以地址末尾要有斜杠；GitHub Pages 访问不带斜杠的 `/little-planet` 时会先跳到带斜杠的地址。
+
+首次启用：打开仓库 **Settings → Pages → Build and deployment → Source**，选择 **GitHub Actions**。之后推送到 `main` 会运行 `.github/workflows/deploy.yml`，也可以在 Actions 里手动运行 **Deploy GitHub Pages**。工作流只用仓库自带的 `GITHUB_TOKEN` 权限（`contents: read`、`pages: write`、`id-token: write`），不需要另加 secret。
+
+仓库里没有别的 CI 工作流。这一份只做类型检查、构建和发布，不代替本地的游戏检查。`public/.nojekyll` 会进到 `dist`，避免 Pages 按 Jekyll 丢掉下划线开头的文件。
 
 ## 代码结构
 
@@ -54,4 +66,4 @@ npm run preview    # 预览生产构建
 - **PR 2**：球面重力下的行走，以及跟着角色走的相机。
 - **PR 3**：玫瑰、三座火山、猴面包树苗的对话，以及日落椅子彩蛋。
 - **PR 4**：移动端虚拟摇杆、开始界面和暂停菜单，并用 localStorage 记住进度（这一支）。
-- **PR 5**：部署。
+- **PR 5**：用 GitHub Actions 发布到 GitHub Pages（这一支）。
