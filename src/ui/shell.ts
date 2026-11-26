@@ -318,8 +318,8 @@ function ensureStyle(): void {
       z-index: 5;
       top: calc(14px + env(safe-area-inset-top));
       right: calc(14px + env(safe-area-inset-right));
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       display: grid;
       place-items: center;
       padding: 0;
@@ -414,6 +414,45 @@ function ensureStyle(): void {
     }
     .sound-row[aria-checked="true"] .sound-switch::after {
       transform: translateX(16px);
+    }
+    @media (max-height: 520px) {
+      .title-screen {
+        padding-top: calc(12px + env(safe-area-inset-top));
+        padding-bottom: calc(14px + env(safe-area-inset-bottom));
+      }
+      .title-name {
+        font-size: 32px;
+      }
+      .title-sub {
+        margin-top: 6px;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+      .menu-actions {
+        margin-top: 12px;
+        gap: 8px;
+      }
+      .menu-button {
+        height: 44px;
+      }
+      .title-help {
+        margin-top: 10px;
+      }
+      .pause-card {
+        padding: 18px 18px 16px;
+      }
+      .pause-name {
+        font-size: 24px;
+      }
+    }
+    @media (max-width: 360px) {
+      .title-name {
+        font-size: 36px;
+      }
+      .title-screen {
+        padding-left: calc(18px + env(safe-area-inset-left));
+        padding-right: calc(18px + env(safe-area-inset-right));
+      }
     }
   `
   document.head.appendChild(style)

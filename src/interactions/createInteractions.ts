@@ -8,6 +8,7 @@ import {
   type PerspectiveCamera,
 } from 'three'
 import { CHARACTER_RADIUS } from '../character/createCharacter'
+import { clientToNdc, ndcToClient, type ScreenRect } from '../math/screen'
 import type { SceneContext } from '../scene/createScene'
 import type { SurfaceProbe } from '../world/surfaceProbe'
 import type { PlanetProps, VolcanoAnchor } from '../world/props'
@@ -74,6 +75,8 @@ export interface InteractionDebug {
 
 export interface Interactions {
   readonly blocksMovement: boolean
+  /** Sunset is moving the light or the chair, so the shadow map must redraw. */
+  readonly shadowDynamic: boolean
   readonly discoverable: number
   discoveredIds(): readonly string[]
   sunsetViews(): number
@@ -177,26 +180,32 @@ export function createInteractions(
     return best
   }
 
+  const canvasRect = (): ScreenRect | null => {
+    const rect = view.renderer.domElement.getBoundingClientRect()
+    if (rect.width < 2 || rect.height < 2) return null
+    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+  }
+
   const projectLift = (center: Vector3, up: Vector3, lift: number, camera: PerspectiveCamera): boolean => {
-    const width = window.innerWidth
-    const height = window.innerHeight
-    if (width < 2 || height < 2) return false
+    const rect = canvasRect()
+    if (!rect) return false
     camera.getWorldDirection(camForward)
     scratch.copy(center).addScaledVector(up, lift)
     toPoint.subVectors(scratch, camera.position)
     if (toPoint.dot(camForward) <= 0.15) return false
     scratch.project(camera)
     if (scratch.z < -1 || scratch.z > 1) return false
-    pixelX = (scratch.x * 0.5 + 0.5) * width
-    pixelY = (-scratch.y * 0.5 + 0.5) * height
+    const point = ndcToClient(scratch.x, scratch.y, rect)
+    pixelX = point.x
+    pixelY = point.y
     return true
   }
 
   const screenFallback = (clientX: number, clientY: number): Item | null => {
+    const rect = canvasRect()
+    if (!rect) return null
     let best: Item | null = null
     let bestD = SCREEN_SLOP_PX * SCREEN_SLOP_PX
-    const width = window.innerWidth
-    const height = window.innerHeight
     view.camera.getWorldDirection(camForward)
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
@@ -210,10 +219,9 @@ export function createInteractions(
       raycaster.intersectObject(planet, false, planetHits)
       if (planetBlocks(aimDist)) continue
       scratch.project(view.camera)
-      const x = (scratch.x * 0.5 + 0.5) * width
-      const y = (-scratch.y * 0.5 + 0.5) * height
-      const dx = x - clientX
-      const dy = y - clientY
+      const point = ndcToClient(scratch.x, scratch.y, rect)
+      const dx = point.x - clientX
+      const dy = point.y - clientY
       const dist = dx * dx + dy * dy
       if (dist <= bestD) {
         best = item
@@ -224,9 +232,10 @@ export function createInteractions(
   }
 
   const pick = (clientX: number, clientY: number): Item | null => {
-    const width = window.innerWidth
-    const height = Math.max(window.innerHeight, 1)
-    ndc.set((clientX / width) * 2 - 1, -(clientY / height) * 2 + 1)
+    const rect = canvasRect()
+    if (!rect) return null
+    const pointer = clientToNdc(clientX, clientY, rect)
+    ndc.set(pointer.x, pointer.y)
     raycaster.setFromCamera(ndc, view.camera)
     planet.updateWorldMatrix(true, false)
     for (let i = 0; i < pickMeshes.length; i++) pickMeshes[i].updateWorldMatrix(true, false)
@@ -255,6 +264,7 @@ export function createInteractions(
   }
 
   const onKey = (event: KeyboardEvent) => {
+    if (event.code === 'Space') event.preventDefault()
     if (event.repeat) return
     if (event.code !== 'KeyE' && event.code !== 'Space') return
     if (!dialogue.isOpen) {
@@ -294,6 +304,9 @@ export function createInteractions(
   return {
     get blocksMovement() {
       return dialogue.isOpen
+    },
+    get shadowDynamic() {
+      return sunset.playing
     },
     discoverable: items.length,
     discoveredIds(): readonly string[] {

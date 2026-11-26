@@ -1,5 +1,5 @@
 # Publish dist/ to GitHub Pages.
-# This repo has no other CI workflow. This file only typechecks, builds, and deploys.
+# Pull requests are tested by ci.yml. This file only typechecks, builds, and deploys.
 # No tokens or extra secrets. Pages uses the workflow's OIDC id-token.
 
 name: Deploy GitHub Pages

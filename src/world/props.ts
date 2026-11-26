@@ -16,7 +16,7 @@ import {
 } from 'three'
 import { palette } from '../config/palette'
 import { frameFromUp } from '../math/frameFromUp'
-import { createSolidMesh, type SolidPart } from '../render/solidMesh'
+import { createSolidMesh, mergeWorldMeshes, type SolidPart } from '../render/solidMesh'
 import type { SphereCollider } from './collision'
 import { SURFACE_CLEARANCE, type SurfaceProbe } from './surfaceProbe'
 
@@ -95,6 +95,10 @@ export function createProps(surface: SurfaceProbe): PlanetProps {
   const baobab = placeAnchor(baobabMesh, new Vector3(0.9, 0.22, -0.18), surface, 'baobab', 0.36)
   group.add(baobab.mesh)
   colliders.push(baobab.collider)
+
+  // Rose, volcanoes, and the sprout never move, so they share one draw
+  // (and one shadow draw). The hidden meshes remain for ray picks.
+  group.add(mergeWorldMeshes([rose.mesh, volcanoes.mesh, baobab.mesh], 'static-props'))
 
   const chairMesh = createSolidMesh(chairParts(), 'chair')
   const chair = placeAnchor(chairMesh, new Vector3(0.55, -0.78, 0.28), surface, 'chair', 0.32)

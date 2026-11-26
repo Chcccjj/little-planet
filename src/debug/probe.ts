@@ -156,6 +156,7 @@ export function installProbe(sources: {
               if (Math.abs(camera.up.dot(dir)) > 0.98) camera.up.set(1, 0, 0)
               camera.lookAt(0, 0, 0)
               camera.updateMatrixWorld()
+              renderer.shadowMap.needsUpdate = true
               renderer.render(view.scene, camera)
               const info = renderer.info.render
               if (info.calls > calls) calls = info.calls

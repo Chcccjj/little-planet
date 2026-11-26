@@ -41,35 +41,51 @@ export function createSky(): SkyView {
     fog: false,
     depthWrite: false,
   })
-  const duskMaterial = new MeshBasicMaterial({
-    map: paintSky(DUSK),
-    side: BackSide,
-    fog: false,
-    depthWrite: false,
-    transparent: true,
-    opacity: 0,
-  })
 
   const day = new Mesh(geometry, dayMaterial)
   day.name = 'sky'
   day.frustumCulled = false
   day.renderOrder = -2
 
-  const dusk = new Mesh(geometry, duskMaterial)
-  dusk.name = 'sky-sunset'
-  // Inside the daytime shell so the depth test still passes over it,
-  // and early in the transparent queue so the dome composites afterwards.
-  dusk.scale.setScalar(0.97)
-  dusk.frustumCulled = false
-  dusk.renderOrder = -1
-  dusk.visible = false
-  day.add(dusk)
+  // The dusk painting is a second 1024 canvas. It stays unbuilt until the
+  // chair actually asks for a sunset.
+  let duskMaterial: MeshBasicMaterial | null = null
+  let dusk: Mesh | null = null
+
+  const ensureDusk = () => {
+    if (dusk && duskMaterial) return
+    duskMaterial = new MeshBasicMaterial({
+      map: paintSky(DUSK),
+      side: BackSide,
+      fog: false,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0,
+    })
+    dusk = new Mesh(geometry, duskMaterial)
+    dusk.name = 'sky-sunset'
+    // Inside the daytime shell so the depth test still passes over it,
+    // and early in the transparent queue so the dome composites afterwards.
+    dusk.scale.setScalar(0.97)
+    dusk.frustumCulled = false
+    dusk.renderOrder = -1
+    day.add(dusk)
+  }
 
   return {
     mesh: day,
     setBlend(amount: number): void {
       const blend = amount < 0 ? 0 : amount > 1 ? 1 : amount
-      dusk.visible = blend > 0.001
+      if (blend <= 0.001) {
+        if (dusk && duskMaterial) {
+          dusk.visible = false
+          duskMaterial.opacity = 0
+        }
+        return
+      }
+      ensureDusk()
+      if (!dusk || !duskMaterial) return
+      dusk.visible = true
       duskMaterial.opacity = blend
     },
   }

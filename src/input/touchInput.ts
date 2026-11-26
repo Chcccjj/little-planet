@@ -1,9 +1,7 @@
+import { stickAxes } from './stick'
 import type { FrameInput, InputDriver } from './types'
 
 const STICK_PX = 118
-/** Knob travel as a fraction of the base diameter. */
-const TRAVEL = 0.32
-const DEADZONE = 0.14
 
 interface Point {
   x: number
@@ -91,25 +89,10 @@ function mountTouch(target: HTMLElement): InputDriver {
 
   const placeStick = (clientX: number, clientY: number) => {
     const rect = root.getBoundingClientRect()
-    const cx = rect.left + rect.width / 2
-    const cy = rect.top + rect.height / 2
-    let dx = clientX - cx
-    let dy = clientY - cy
-    const max = Math.max(rect.width * TRAVEL, 1)
-    let len = Math.hypot(dx, dy)
-    if (len > max && len > 0) {
-      dx *= max / len
-      dy *= max / len
-      len = max
-    }
-    knob.style.transform = `translate(${dx}px, ${dy}px)`
-    if (len < max * DEADZONE) {
-      moveX = 0
-      moveY = 0
-      return
-    }
-    moveX = dx / max
-    moveY = -dy / max
+    const axes = stickAxes(clientX - (rect.left + rect.width / 2), clientY - (rect.top + rect.height / 2), rect.width)
+    knob.style.transform = `translate(${axes.knobX}px, ${axes.knobY}px)`
+    moveX = axes.x
+    moveY = axes.y
   }
 
   const pinchSpan = (): number => {
@@ -310,6 +293,17 @@ function ensureStyle(): void {
       background: rgba(242, 239, 233, 0.82);
       border: 1px solid rgba(184, 190, 198, 0.9);
       pointer-events: none;
+    }
+    @media (max-height: 430px) {
+      .joystick {
+        width: 96px;
+        height: 96px;
+      }
+      .joystick-knob {
+        width: 42px;
+        height: 42px;
+        margin: -21px 0 0 -21px;
+      }
     }
   `
   document.head.appendChild(style)

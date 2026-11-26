@@ -1,10 +1,14 @@
 import { palette } from '../config/palette'
+import { readSafeInsets, readViewport, type SafeInsets } from '../core/viewport'
 
 export interface HintView {
   show(x: number, y: number, target: string): void
   hide(): void
   dispose(): void
 }
+
+const HINT_W = 84
+const HINT_H = 28
 
 /** One chip reused for whichever prop the prince is close to. */
 export function createHint(): HintView {
@@ -16,30 +20,47 @@ export function createHint(): HintView {
   document.body.append(el)
 
   const coarse = window.matchMedia('(pointer: coarse)')
+  let label = ''
+  let safe: SafeInsets = { top: 0, right: 0, bottom: 0, left: 0 }
   const syncLabel = () => {
-    el.textContent = coarse.matches ? '轻触' : 'E / 点击'
+    const next = coarse.matches ? '轻触' : 'E / 点击'
+    if (next === label) return
+    label = next
+    el.textContent = next
+  }
+  const refreshSafe = () => {
+    safe = readSafeInsets()
   }
   syncLabel()
+  refreshSafe()
   coarse.addEventListener('change', syncLabel)
+  window.addEventListener('resize', refreshSafe)
+  window.addEventListener('orientationchange', refreshSafe)
 
   return {
     show(x: number, y: number, target: string): void {
       syncLabel()
-      el.hidden = false
-      el.dataset.target = target
-      const width = el.offsetWidth || 72
-      const height = el.offsetHeight || 24
-      const left = clamp(x, 8 + width / 2, window.innerWidth - 8 - width / 2)
-      const top = clamp(y, 8 + height * 1.3, window.innerHeight - 8)
+      if (el.hidden) el.hidden = false
+      if (el.dataset.target !== target) el.dataset.target = target
+      const box = readViewport()
+      const left = clamp(
+        x,
+        box.left + safe.left + 8 + HINT_W / 2,
+        box.left + box.width - safe.right - 8 - HINT_W / 2,
+      )
+      const top = clamp(y, box.top + safe.top + 8 + HINT_H, box.top + box.height - safe.bottom - 8)
       el.style.left = `${left}px`
       el.style.top = `${top}px`
     },
     hide(): void {
+      if (el.hidden) return
       el.hidden = true
       delete el.dataset.target
     },
     dispose(): void {
       coarse.removeEventListener('change', syncLabel)
+      window.removeEventListener('resize', refreshSafe)
+      window.removeEventListener('orientationchange', refreshSafe)
       el.remove()
     },
   }
@@ -60,8 +81,11 @@ function ensureStyle(): void {
       z-index: 3;
       margin: 0;
       transform: translate(-50%, -130%);
+      box-sizing: border-box;
+      width: 84px;
       padding: 5px 10px;
       border-radius: 999px;
+      text-align: center;
       background: rgba(242, 239, 233, 0.94);
       color: ${palette.ink};
       font: 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;

@@ -52,8 +52,45 @@ export function createSolidMesh(parts: readonly SolidPart[], name: string): Mesh
 
   const merged = mergeGeometries(baked, false)
   for (let i = 0; i < baked.length; i++) baked[i].dispose()
+  if (!merged) throw new Error(`Cannot merge ${name}`)
   // Part normals survive the merge and keep the attribute bound. flatShading
   // ignores them and rebuilds face normals in the fragment shader.
+
+  const mesh = new Mesh(
+    merged,
+    new MeshLambertMaterial({
+      vertexColors: true,
+      flatShading: true,
+    }),
+  )
+  mesh.name = name
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  return mesh
+}
+
+/**
+ * One Lambert mesh for props that never move relative to each other.
+ * The source meshes stay in the graph (hidden, no shadow) so ray picks can
+ * still tell the rose from a volcano. Their geometry is cloned, not reused.
+ */
+export function mergeWorldMeshes(meshes: readonly Mesh[], name: string): Mesh {
+  const baked: BufferGeometry[] = []
+  for (let i = 0; i < meshes.length; i++) {
+    const source = meshes[i]
+    source.updateMatrix()
+    const geometry = source.geometry.clone()
+    geometry.applyMatrix4(source.matrix)
+    baked.push(geometry)
+    source.visible = false
+    source.castShadow = false
+    source.receiveShadow = false
+  }
+
+  const merged = mergeGeometries(baked, false)
+  for (let i = 0; i < baked.length; i++) baked[i].dispose()
+  if (!merged) throw new Error(`Cannot merge ${name}`)
+  merged.computeBoundingSphere()
 
   const mesh = new Mesh(
     merged,

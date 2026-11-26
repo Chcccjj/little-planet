@@ -61,8 +61,8 @@ function ensureStyle(): void {
   style.textContent = `
     .perf-panel {
       position: fixed;
-      top: 12px;
-      left: 12px;
+      top: calc(12px + env(safe-area-inset-top));
+      left: calc(12px + env(safe-area-inset-left));
       z-index: 2;
       margin: 0;
       padding: 7px 10px;
