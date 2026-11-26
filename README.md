@@ -65,5 +65,5 @@ https://chcccjj.github.io/little-planet/
 
 - **PR 2**：球面重力下的行走，以及跟着角色走的相机。
 - **PR 3**：玫瑰、三座火山、猴面包树苗的对话，以及日落椅子彩蛋。
-- **PR 4**：移动端虚拟摇杆、开始界面和暂停菜单，并用 localStorage 记住进度（这一支）。
+- **PR 4**：移动端虚拟摇杆、开始界面和暂停菜单，并用 localStorage 记住进度。
 - **PR 5**：用 GitHub Actions 发布到 GitHub Pages（这一支）。
